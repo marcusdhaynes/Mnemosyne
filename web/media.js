@@ -1,3 +1,4 @@
+import {inspectFile,dateFromFilename} from './formats/index.js';
 const MAX_IMAGE_EDGE=640;
 const MAX_DIGEST_BYTES=80*1024*1024;
 export async function digestFile(file){
@@ -46,39 +47,18 @@ async function videoThumbnail(file){
   }catch{return {thumbnail:null,width:null,height:null,phash:null,duration:null};}
   finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
 }
-/** Read JPEG EXIF capture timestamp without decoding the full image. */
+/** Best capture timestamp for one file (ms). JPEG, HEIC, PNG, WebP EXIF and MOV/MP4
+ * QuickTime dates via web/formats, then filename patterns, then mtime. For grouped
+ * items and export sidecars use `resolveMedia` from web/formats/index.js instead. */
 export async function capturedAt(file){
-  if(!/\.jpe?g$/i.test(file.name))return file.lastModified||Date.now();
   try{
-    const bytes=new Uint8Array(await file.slice(0,262144).arrayBuffer());
-    if(bytes[0]!==0xff||bytes[1]!==0xd8)return file.lastModified||Date.now();
-    for(let offset=2;offset+12<bytes.length;){
-      if(bytes[offset]!==0xff)break;
-      const marker=bytes[offset+1],size=bytes[offset+2]*256+bytes[offset+3];
-      if(size<2||offset+2+size>bytes.length)break;
-      const start=offset+4;
-      if(marker===0xe1&&String.fromCharCode(...bytes.subarray(start,start+4))==='Exif'){
-        const base=start+6,little=bytes[base]===73&&bytes[base+1]===73;
-        if(!little&&!(bytes[base]===77&&bytes[base+1]===77))break;
-        const view=new DataView(bytes.buffer);
-        const u16=p=>p+2<=bytes.length?view.getUint16(p,little):0;
-        const u32=p=>p+4<=bytes.length?view.getUint32(p,little):0;
-        const ifd=relative=>{const pos=base+relative,count=u16(pos);const records=[];for(let i=0;i<Math.min(count,100);i++){let at=pos+2+i*12;if(at+12>bytes.length)break;records.push({tag:u16(at),type:u16(at+2),length:u32(at+4),value:u32(at+8)});}return records;};
-        const primary=ifd(u32(base+4)),exif=primary.find(r=>r.tag===0x8769);
-        if(exif){const dateTag=ifd(exif.value).find(r=>r.tag===0x9003||r.tag===0x9004);if(dateTag&&dateTag.length>=19){
-          const pos=base+dateTag.value;
-          if(pos+19<=bytes.length){const raw=new TextDecoder().decode(bytes.subarray(pos,pos+19));
-            if(/^\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)){
-              const dt=new Date(raw.replace(/^(\d{4}):(\d{2}):(\d{2}) /,'$1-$2-$3T'));
-              if(Number.isFinite(dt.getTime()))return dt.getTime();
-            }
-          }
-        }}
-        break;
-      }
-      offset+=2+size;
-    }
-  }catch{/* A malformed EXIF segment must never prevent import. */}
+    const info=await inspectFile(file);
+    const order=['exif','quicktime','xmp','quicktime-mvhd'];
+    const best=[...info.embeddedDates].sort((a,b)=>order.indexOf(a.source)-order.indexOf(b.source))[0];
+    if(best)return best.takenAt;
+    const named=dateFromFilename(file.name||'');
+    if(named?.date)return named.date.takenAt;
+  }catch{/* A malformed metadata block must never prevent import. */}
   return file.lastModified||Date.now();
 }
 export async function createThumbnail(file){
