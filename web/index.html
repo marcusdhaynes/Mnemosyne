@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111214" />
+  <meta name="description" content="Mnemosyne — a private, artfully organized home for every photograph." />
+  <link rel="icon" type="image/svg+xml" href="./assets/mark.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Mnemosyne — A Beautiful Place for Every Memory</title>
+</head>
+<body>
+<div id="app" class="app-shell">
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <div class="brand"><div class="brand-mark"><img src="./assets/mark.svg" alt=""/></div><div class="brand-type">MNEMOSYNE<span>YOUR PRIVATE PHOTO ATELIER</span></div></div>
+    <div class="sidebar-scroll">
+      <div class="nav-section-label">LIBRARY</div>
+      <nav id="main-nav" class="nav-stack">
+        <button data-view="library" class="nav-link active"><span class="nav-icon">◫</span> All Photographs <span class="nav-count" data-count="library">0</span></button>
+        <button data-view="favorites" class="nav-link"><span class="nav-icon">♡</span> Favorites <span class="nav-count" data-count="favorites">0</span></button>
+        <button data-view="recent" class="nav-link"><span class="nav-icon">◷</span> Recently Added</button>
+        <button data-view="duplicates" class="nav-link"><span class="nav-icon">▧</span> Duplicates <span class="nav-count" data-count="duplicates">0</span></button>
+        <button data-view="trash" class="nav-link"><span class="nav-icon">♲</span> Recently Deleted</button>
+      </nav>
+      <div class="nav-section-row"><div class="nav-section-label">COLLECTIONS</div><button id="new-album" class="icon-control small" title="Create collection" aria-label="Create collection">＋</button></div>
+      <nav id="albums-list" class="nav-stack album-stack"><div class="sidebar-hint">Collections you create will appear here.</div></nav>
+      <div class="nav-section-label smart-label">SMART DISCOVERY</div>
+      <nav class="nav-stack">
+        <button data-view="moments" class="nav-link"><span class="nav-icon">✧</span> Moments</button>
+        <button data-view="portraits" class="nav-link"><span class="nav-icon">◉</span> Portraits <span class="new-tiny">BETA</span></button>
+      </nav>
+    </div>
+    <div class="sidebar-footer"><div class="privacy-dot"></div><div><b>Private by design</b><small>Stored locally on this device</small></div><button id="open-settings" class="icon-control" title="Preferences" aria-label="Preferences">⚙</button></div>
+  </aside>
+  <main class="main-area">
+    <header class="topbar">
+      <button id="mobile-menu" class="icon-control mobile-only" aria-label="Toggle menu">☰</button>
+      <div class="breadcrumbs"><span>MY SPACE</span><span class="breadcrumb-separator">/</span><strong id="breadcrumb-view">All Photographs</strong></div>
+      <div class="top-actions">
+        <button id="search-toggle" class="header-search" title="Search"><span class="search-symbol">⌕</span><span>Search your memories</span><kbd>⌘ K</kbd></button>
+        <button id="import-folder" class="subtle-button hide-mobile"><span>▣</span> Import Folder</button>
+        <button id="import-button" class="primary-button"><span>＋</span> Add Photos</button>
+        <input type="file" id="file-input" multiple accept="image/*,video/*,.heic,.heif,.avif,.jxl,.dng,.nef,.cr2,.arw" hidden />
+        <input type="file" id="folder-input" multiple webkitdirectory directory hidden />
+      </div>
+    </header>
+    <div class="main-scroll" id="main-scroll">
+      <div class="eyebrow"><span class="tiny-line"></span> A BEAUTIFUL PLACE FOR EVERY MEMORY</div>
+      <div class="page-heading"><div><h1 id="page-title">Your photographs,<br/><em>beautifully kept.</em></h1><p id="page-subtitle">A thoughtful home for life's remarkable little moments.</p></div><div class="heading-actions"><button id="slideshow-button" class="outlined-button">▷ &nbsp; Slideshow</button><button id="sort-button" class="outlined-button">↓ &nbsp; Newest First</button></div></div>
+      <section class="feature-panel" id="feature-panel" aria-label="Welcome to Mnemosyne">
+        <div class="feature-copy"><span class="feature-kicker">INTRODUCING YOUR NEW PHOTO ATELIER</span><h2>Make room for<br/>what <em>matters.</em></h2><p>Every frame tells a story. Give yours a home that feels as extraordinary as the moments themselves.</p><div class="feature-actions"><button id="welcome-import" class="light-button">Begin Your Collection <span>↗</span></button><span>YOUR PHOTOS STAY YOURS</span></div></div>
+        <div class="feature-art" aria-hidden="true"><div class="art-glow"></div><div class="polaroid back"><div class="fake-photo mountain"></div><div class="polaroid-caption">Somewhere, forever.</div></div><div class="polaroid front"><div class="fake-photo flowers"><div class="flower-stem"></div><div class="flower-head one"></div><div class="flower-head two"></div><div class="flower-head three"></div></div><div class="polaroid-caption">The beautiful ordinary.</div></div><span class="art-sparkle">✳</span></div>
+      </section>
+      <section class="stat-strip" id="stat-strip"><div><small>YOUR COLLECTION</small><strong id="stat-total">00 <span>photographs</span></strong></div><div class="stat-sep"></div><div><small>HEARTS KEPT</small><strong id="stat-favorites">00 <span>favorites</span></strong></div><div class="stat-sep"></div><div><small>COLLECTIONS</small><strong id="stat-albums">00 <span>albums</span></strong></div><div class="stat-sparkle">✣</div></section>
+      <section class="gallery-section"><div class="gallery-heading"><div><span class="eyebrow smaller">YOUR VISUAL STORY</span><h2 id="gallery-heading">The Collection <span id="filtered-count"></span></h2></div><div class="gallery-tools"><button class="layout-button active" id="grid-mode" title="Grid view" aria-label="Grid view">▦</button><button class="layout-button" id="large-mode" title="Large view" aria-label="Large view">▥</button><button id="filter-button" class="outlined-button filter-pill">☷ &nbsp; Filter <span id="filter-indicator" hidden>•</span></button></div></div>
+        <div id="filter-bar" class="filter-bar" hidden><label for="type-filter">TYPE</label><select id="type-filter"><option value="all">All media</option><option value="image">Photographs</option><option value="video">Videos</option></select><label for="month-filter">DATE</label><select id="month-filter"><option value="all">Any date</option></select><button id="clear-filters" class="quiet-button">Clear filters</button></div>
+        <div id="gallery" class="photo-grid" aria-live="polite"></div>
+        <div id="empty-gallery" class="empty-gallery"><div class="empty-orbit"><div class="empty-icon">✧</div></div><h3 id="empty-title">Your next chapter starts here.</h3><p id="empty-caption">Add your first photographs. We'll help arrange the memories into something wonderful.</p><button id="empty-import" class="outlined-button">＋ &nbsp; Add photographs</button></div>
+      </section>
+      <footer class="app-footer"><span>© MNEMOSYNE · MADE FOR MOMENTS WORTH KEEPING</span><span>PRIVATE · LOCAL FIRST · YOURS FOREVER</span></footer>
+    </div>
+  </main>
+</div>
+<div id="drop-layer" class="drop-layer" hidden><div>✧<h2>Drop your memories here</h2><p>Photos and videos · Your files stay on this device</p></div></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="modal-root"></div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
