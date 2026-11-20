@@ -54,7 +54,9 @@ CLI (no Tauri needed): `mnemosyne-index index\|thumbs\|preview\|bench <folder> -
 
 ## Preview JSON
 
-`schemes`: `event`, `date`, `type`. (People grouping is Angen's.) Each group has `id`, `kind`, `title`, `confidence`, `reason`, `cover_item_id`, `item_ids`, `count`, `children`.
+The pass-1 preview is compatible with Angen's `proposal.schema.json` so Trice's UI can read one shape. `scheme` defaults to `"event"`. `groups` is the event list (the same objects as `events`). `people` and `duplicates` are empty arrays for Angen to fill. `unsorted` is `{item_ids, reason_counts}` and starts empty.
+
+`schemes`: `event`, `date`, `type`. (People grouping is Angen's.) Each group has `id`, `kind`, `title`, `confidence`, `reason`, `cover_item_id`, `item_ids`, `count`, `children`. The `events`, `dates` and `types` arrays remain so a caller can switch schemes without a recompute.
 
 `proposals[]` (for Anky's commit dry-run):
 
