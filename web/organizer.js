@@ -23,6 +23,9 @@ export function duplicateSets(items) {
   const byHash=new Map();for(const item of items){if(item.deletedAt||!item.hash)continue;const list=byHash.get(item.hash)||[];list.push(item);byHash.set(item.hash,list);}
   return [...byHash.values()].filter(v=>v.length>1);
 }
+/** Files that belong to another item's tile (Live Photo video, extra burst frames,
+ * Snapchat overlay). They stay in the catalog and in Trash, but never show as tiles. */
+export const COMPANION_ROLES=new Set(['live-video','burst-frame','overlay']);
 /** Filtering is linear (plus the final sort); duplicate lookup is precomputed.
  * This matters at 10k–100k files, where per-item scans would be quadratic. */
 export function visibleItems(items,{view='library',albumId=null,query='',type='all',month='all',sort='newest'}={}){
@@ -32,6 +35,7 @@ export function visibleItems(items,{view='library',albumId=null,query='',type='a
   const result=items.filter(item=>{
     if(view==='trash')return !!item.deletedAt;
     if(item.deletedAt)return false;
+    if(COMPANION_ROLES.has(item.mediaRole))return false;
     if(view==='favorites'&&!item.favorite)return false;
     if(view==='duplicates'&&(!item.hash||(counts.get(item.hash)||0)<2))return false;
     if(view==='review'&&!(item.reviewSuggestions?.length))return false;

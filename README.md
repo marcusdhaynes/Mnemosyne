@@ -48,7 +48,7 @@ Native Rust is unverified in this workspace because the Rust toolchain was unava
 
 - No face recognition, object detection, visual AI natural-language search, automated photo enhancement, geographic map, advanced editing or cross-device cloud synchronization **yet**.
 - RAW and HEIC/HEIF/JPEG XL files can be imported but may not display previews unless the browser supports decoding. Format-specific native codecs are still required.
-- Dates are derived from file modification timestamps, not camera EXIF capture dates.
+- Capture dates come from EXIF/QuickTime (JPEG, HEIC, PNG, WebP, MOV/MP4), then export sidecars (Google Takeout, Instagram, Facebook, Snapchat), then filename patterns (WhatsApp, screenshots), then file modification time; the winning source is recorded. See [media formats](docs/MEDIA-FORMATS.md).
 - Browser storage is subject to quotas and eviction. A production native release should index original file paths without duplicating large libraries in IndexedDB.
 - Native scanner currently returns metadata for at most 5,000 files per invocation, and does not yet persist a native catalog or ingest into the gallery.
 - Mobile Tauri build generation, native permissions, backup, background indexing and app-store signing are not implemented.
