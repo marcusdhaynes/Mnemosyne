@@ -13,3 +13,8 @@ src-tauri/gen/
 *.key
 *.p12
 *.mobileprovision
+
+# Local bench sets (50k synthetic library, not checked in)
+bench-data/
+.bench-data/
+src-tauri/bench-data/
