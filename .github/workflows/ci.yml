@@ -30,6 +30,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build frontend assets for Tauri compile tests
+        run: npm run build
       - uses: dtolnay/rust-toolchain@stable
       - name: Linux WebKit system dependencies
         if: runner.os == 'Linux'
