@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111214" />
   <meta name="description" content="Mnemosyne — a private, artfully organized home for every photograph." />
   <link rel="icon" type="image/svg+xml" href="./assets/mark.svg" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css" /><link rel="stylesheet" href="./glass.css" />
   <title>Mnemosyne — A Beautiful Place for Every Memory</title>
 </head>
 <body>
@@ -19,6 +19,10 @@
         <button data-view="library" class="nav-link active"><span class="nav-icon">◫</span> All Photographs <span class="nav-count" data-count="library">0</span></button>
         <button data-view="favorites" class="nav-link"><span class="nav-icon">♡</span> Favorites <span class="nav-count" data-count="favorites">0</span></button>
         <button data-view="recent" class="nav-link"><span class="nav-icon">◷</span> Recently Added</button>
+        <button data-view="shorts" class="nav-link"><span class="nav-icon">▷</span> Shorts & Clips <span class="nav-count" data-count="shorts">0</span></button>
+        <button data-view="videos" class="nav-link"><span class="nav-icon">◩</span> All Videos <span class="nav-count" data-count="videos">0</span></button>
+        <button data-view="screenshots" class="nav-link"><span class="nav-icon">▣</span> Screenshots</button>
+        <button data-view="review" class="nav-link review-link"><span class="nav-icon">✧</span> Review Suggestions <span class="nav-count" data-count="review" id="review-count">0</span></button>
         <button data-view="duplicates" class="nav-link"><span class="nav-icon">▧</span> Duplicates <span class="nav-count" data-count="duplicates">0</span></button>
         <button data-view="trash" class="nav-link"><span class="nav-icon">♲</span> Recently Deleted</button>
       </nav>
@@ -38,9 +42,12 @@
       <div class="breadcrumbs"><span>MY SPACE</span><span class="breadcrumb-separator">/</span><strong id="breadcrumb-view">All Photographs</strong></div>
       <div class="top-actions">
         <button id="search-toggle" class="header-search" title="Search"><span class="search-symbol">⌕</span><span>Search your memories</span><kbd>⌘ K</kbd></button>
+        <button id="organize-button" class="subtle-button organize-action"><span>✧</span> Organize</button>
+        <button id="connect-sources" class="subtle-button connect-action"><span>⬡</span> Sources</button>
         <button id="import-folder" class="subtle-button hide-mobile"><span>▣</span> Import Folder</button>
         <button id="import-button" class="primary-button"><span>＋</span> Add Photos</button>
-        <input type="file" id="file-input" multiple accept="image/*,video/*,.heic,.heif,.avif,.jxl,.dng,.nef,.cr2,.arw" hidden />
+        <input type="file" id="file-input" multiple accept="image/*,video/*,.heic,.heif,.avif,.jxl,.dng,.nef,.cr2,.cr3,.arw,.raf,.orf,.rw2,.3gp,.mkv,.avi,.mts,.m2ts,.wmv,.flv,.ogv,.ts,.zip" hidden />
+        <input type="file" id="archive-input" multiple accept=".zip,application/zip" hidden />
         <input type="file" id="folder-input" multiple webkitdirectory directory hidden />
       </div>
     </header>
@@ -55,7 +62,7 @@
       <section class="gallery-section"><div class="gallery-heading"><div><span class="eyebrow smaller">YOUR VISUAL STORY</span><h2 id="gallery-heading">The Collection <span id="filtered-count"></span></h2></div><div class="gallery-tools"><button class="layout-button active" id="grid-mode" title="Grid view" aria-label="Grid view">▦</button><button class="layout-button" id="large-mode" title="Large view" aria-label="Large view">▥</button><button id="filter-button" class="outlined-button filter-pill">☷ &nbsp; Filter <span id="filter-indicator" hidden>•</span></button></div></div>
         <div id="filter-bar" class="filter-bar" hidden><label for="type-filter">TYPE</label><select id="type-filter"><option value="all">All media</option><option value="image">Photographs</option><option value="video">Videos</option></select><label for="month-filter">DATE</label><select id="month-filter"><option value="all">Any date</option></select><button id="clear-filters" class="quiet-button">Clear filters</button></div>
         <div id="gallery" class="photo-grid" aria-live="polite"></div>
-        <div id="empty-gallery" class="empty-gallery"><div class="empty-orbit"><div class="empty-icon">✧</div></div><h3 id="empty-title">Your next chapter starts here.</h3><p id="empty-caption">Add your first photographs. We'll help arrange the memories into something wonderful.</p><button id="empty-import" class="outlined-button">＋ &nbsp; Add photographs</button></div>
+        <div id="empty-gallery" class="empty-gallery"><div class="empty-orbit"><div class="empty-icon">✧</div></div><h3 id="empty-title">Your next chapter starts here.</h3><p id="empty-caption">Add your first photographs. We’ll organize verified details and ask you to approve anything uncertain.</p><button id="empty-import" class="outlined-button">＋ &nbsp; Add photographs</button></div>
       </section>
       <footer class="app-footer"><span>© MNEMOSYNE · MADE FOR MOMENTS WORTH KEEPING</span><span>PRIVATE · LOCAL FIRST · YOURS FOREVER</span></footer>
     </div>

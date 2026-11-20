@@ -1,5 +1,8 @@
 # Mnemosyne
 
+> **Version 0.2.0 development:** Crystalline glass interface, staged review queue, source-oriented imports and social ZIP support, Shorts classification, non-destructive basic edits, and indexed native SQLite catalog. The advanced ML face-identification and connected cloud drives are **not yet available**; see [feature audit](docs/FEATURE_AUDIT.md) and [architecture](docs/ARCHITECTURE.md).
+
+
 **Your private photo atelier.** A working, local-first photographic library with a carefully designed cross-platform foundation.
 
 > **Status: v0.1.0 prototype, not a completed clone of 10 mature photo managers.** The web app is functional; desktop packages and mobile apps are not yet built or tested. Do not use the prototype as the sole copy of valuable photographs.
