@@ -77,3 +77,7 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for the exact repository setup instructions
 - Android/iOS workflow targets are not enabled until native permissions, CI provisioning, signing, and device tests are implemented.
 
 See `docs/ROADMAP.md`, `docs/SECURITY.md`, and `docs/DESIGN.md` for details.
+
+### Current development preview
+
+Mnemosyne v0.2.0 includes reviewable source/date sorting, short-form video organization, ZIP media exports, basic non-destructive edits, expanded format cataloging and a native SQLite indexing backend. Advanced AI face identity, cloud OAuth connections and full RAW/video codec parity remain planned and must not be represented as active features.
