@@ -16,17 +16,31 @@ const PLACE_SPLIT_KM: f64 = 50.0;
 #[derive(Debug, Serialize)]
 pub struct Preview {
     pub scan_id: String,
+    /// Default scheme for Trice / Angen's proposal.schema.json (`groups` below).
+    pub scheme: String,
     pub stage: String,
     pub completeness: f64,
     pub schemes: Vec<String>,
+    /// Event groups; also exposed as `groups` so the UI can read one shape.
+    pub groups: Vec<Group>,
     pub events: Vec<Group>,
     pub dates: Vec<Group>,
     pub types: Vec<Group>,
+    /// Angen fills people and near-duplicates; left empty at pass 1.
+    pub people: Vec<serde_json::Value>,
+    pub duplicates: Vec<serde_json::Value>,
+    pub unsorted: Unsorted,
     pub proposals: Vec<Proposal>,
     pub stats: PreviewStats,
     /// Columns teammates fill in the catalog. Present so the UI and commit
     /// step can pass them through without the indexer inventing values.
     pub hooks: HooksInfo,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Unsorted {
+    pub item_ids: Vec<String>,
+    pub reason_counts: std::collections::BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -99,12 +113,20 @@ pub fn preview_from_records(root: &str, records: &[MediaRecord]) -> Preview {
     let scan_id = format!("s_{}", crate::media::item_id_for(root));
     Preview {
         scan_id,
+        scheme: "event".into(),
         stage: "S1_metadata".into(),
         completeness: if records.is_empty() { 0.0 } else { 1.0 },
         schemes: vec!["event".into(), "date".into(), "type".into()],
+        groups: events.clone(),
         events,
         dates,
         types,
+        people: Vec::new(),
+        duplicates: Vec::new(),
+        unsorted: Unsorted {
+            item_ids: Vec::new(),
+            reason_counts: Default::default(),
+        },
         proposals,
         stats: stats(records),
         hooks: HooksInfo {

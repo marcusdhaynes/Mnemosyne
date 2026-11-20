@@ -53,6 +53,10 @@ pub fn read_file_meta(path: &Path, kind: &str, name: &str, modified_ms: i64) -> 
         }
         if let Ok(exif) = parse_exif(bytes) {
             apply_exif(&exif, &mut meta);
+        } else if let Some(fields) = parse_exif_lenient(bytes) {
+            // kamadak-exif rejects some valid writers (e.g. piexif thumbnail IFDs
+            // with "Unexpected next IFD"). Fall back to a small IFD walker.
+            apply_lenient(fields, &mut meta);
         }
     }
 
@@ -638,10 +642,288 @@ fn ffprobe_duration_ms(path: &Path) -> Option<i64> {
     }
 }
 
+
+#[derive(Default, Debug)]
+struct LenientExif {
+    make: Option<String>,
+    model: Option<String>,
+    lens: Option<String>,
+    datetime_original: Option<String>,
+    datetime: Option<String>,
+    offset: Option<String>,
+    width: Option<i64>,
+    height: Option<i64>,
+    lat: Option<f64>,
+    lon: Option<f64>,
+}
+
+/// Minimal TIFF/APP1 walker used when kamadak-exif rejects a file.
+fn parse_exif_lenient(bytes: &[u8]) -> Option<LenientExif> {
+    let tiff = app1_exif_tiff(bytes)?;
+    parse_tiff_fields(&tiff)
+}
+
+fn app1_exif_tiff(bytes: &[u8]) -> Option<&[u8]> {
+    if bytes.len() < 12 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
+        return None;
+    }
+    let mut i = 2usize;
+    while i + 4 < bytes.len() {
+        if bytes[i] != 0xFF {
+            break;
+        }
+        let marker = bytes[i + 1];
+        if marker == 0xDA || marker == 0xD9 {
+            break;
+        }
+        if marker == 0xD8 {
+            i += 2;
+            continue;
+        }
+        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
+        if len < 2 || i + 2 + len > bytes.len() {
+            break;
+        }
+        if marker == 0xE1 {
+            let payload = &bytes[i + 4..i + 2 + len];
+            if payload.starts_with(b"Exif\0\0") && payload.len() > 6 {
+                return Some(&payload[6..]);
+            }
+        }
+        i += 2 + len;
+    }
+    None
+}
+
+fn parse_tiff_fields(tiff: &[u8]) -> Option<LenientExif> {
+    if tiff.len() < 8 {
+        return None;
+    }
+    let le = match &tiff[0..2] {
+        b"II" => true,
+        b"MM" => false,
+        _ => return None,
+    };
+    if u16_at(tiff, 2, le)? != 42 {
+        return None;
+    }
+    let ifd0 = u32_at(tiff, 4, le)? as usize;
+    let entries = ifd_entries(tiff, ifd0, le)?;
+    let mut out = LenientExif::default();
+    let mut exif_off = None;
+    let mut gps_off = None;
+    for e in &entries {
+        match e.tag {
+            0x010F => out.make = ifd_ascii(tiff, e, le),
+            0x0110 => out.model = ifd_ascii(tiff, e, le),
+            0x0132 => out.datetime = ifd_ascii(tiff, e, le),
+            0x8769 => exif_off = ifd_u32(e, le),
+            0x8825 => gps_off = ifd_u32(e, le),
+            _ => {}
+        }
+    }
+    if let Some(off) = exif_off {
+        if let Some(exif_entries) = ifd_entries(tiff, off as usize, le) {
+            for e in &exif_entries {
+                match e.tag {
+                    0x9003 => out.datetime_original = ifd_ascii(tiff, e, le),
+                    0x9004 => {
+                        if out.datetime_original.is_none() {
+                            out.datetime_original = ifd_ascii(tiff, e, le);
+                        }
+                    }
+                    0x9010 | 0x9011 | 0x9012 => {
+                        if out.offset.is_none() {
+                            out.offset = ifd_ascii(tiff, e, le);
+                        }
+                    }
+                    0xA434 => out.lens = ifd_ascii(tiff, e, le),
+                    0xA433 => {
+                        if out.lens.is_none() {
+                            out.lens = ifd_ascii(tiff, e, le);
+                        }
+                    }
+                    0xA002 => out.width = ifd_u32(e, le).map(|v| v as i64),
+                    0xA003 => out.height = ifd_u32(e, le).map(|v| v as i64),
+                    _ => {}
+                }
+            }
+        }
+    }
+    if let Some(off) = gps_off {
+        if let Some(gps_entries) = ifd_entries(tiff, off as usize, le) {
+            let mut lat_ref = None;
+            let mut lon_ref = None;
+            let mut lat = None;
+            let mut lon = None;
+            for e in &gps_entries {
+                match e.tag {
+                    0x0001 => lat_ref = ifd_ascii(tiff, e, le),
+                    0x0003 => lon_ref = ifd_ascii(tiff, e, le),
+                    0x0002 => lat = ifd_gps_coord(tiff, e, le),
+                    0x0004 => lon = ifd_gps_coord(tiff, e, le),
+                    _ => {}
+                }
+            }
+            if let (Some(mut la), Some(mut lo)) = (lat, lon) {
+                if matches!(lat_ref.as_deref(), Some(r) if r.starts_with('S') || r.starts_with('s')) {
+                    la = -la;
+                }
+                if matches!(lon_ref.as_deref(), Some(r) if r.starts_with('W') || r.starts_with('w')) {
+                    lo = -lo;
+                }
+                if la.abs() <= 90.0 && lo.abs() <= 180.0 {
+                    out.lat = Some(la);
+                    out.lon = Some(lo);
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
+struct IfdEntry {
+    tag: u16,
+    typ: u16,
+    count: u32,
+    value: u32,
+}
+
+fn ifd_entries(tiff: &[u8], offset: usize, le: bool) -> Option<Vec<IfdEntry>> {
+    if offset + 2 > tiff.len() {
+        return None;
+    }
+    let count = u16_at(tiff, offset, le)? as usize;
+    let mut entries = Vec::with_capacity(count);
+    let mut p = offset + 2;
+    for _ in 0..count {
+        if p + 12 > tiff.len() {
+            break;
+        }
+        entries.push(IfdEntry {
+            tag: u16_at(tiff, p, le)?,
+            typ: u16_at(tiff, p + 2, le)?,
+            count: u32_at(tiff, p + 4, le)?,
+            value: u32_at(tiff, p + 8, le)?,
+        });
+        p += 12;
+    }
+    Some(entries)
+}
+
+fn u16_at(b: &[u8], o: usize, le: bool) -> Option<u16> {
+    let s = b.get(o..o + 2)?;
+    Some(if le {
+        u16::from_le_bytes(s.try_into().ok()?)
+    } else {
+        u16::from_be_bytes(s.try_into().ok()?)
+    })
+}
+
+fn u32_at(b: &[u8], o: usize, le: bool) -> Option<u32> {
+    let s = b.get(o..o + 4)?;
+    Some(if le {
+        u32::from_le_bytes(s.try_into().ok()?)
+    } else {
+        u32::from_be_bytes(s.try_into().ok()?)
+    })
+}
+
+fn ifd_u32(e: &IfdEntry, le: bool) -> Option<u32> {
+    match (e.typ, e.count) {
+        (3, 1) => Some(if le { e.value & 0xFFFF } else { e.value >> 16 }),
+        (4, 1) | (13, 1) => Some(e.value),
+        _ => None,
+    }
+}
+
+fn ifd_ascii(tiff: &[u8], e: &IfdEntry, le: bool) -> Option<String> {
+    if e.typ != 2 || e.count == 0 {
+        return None;
+    }
+    let bytes = if e.count <= 4 {
+        let raw = if le {
+            e.value.to_le_bytes()
+        } else {
+            e.value.to_be_bytes()
+        };
+        raw[..e.count as usize].to_vec()
+    } else {
+        let off = e.value as usize;
+        tiff.get(off..off + e.count as usize)?.to_vec()
+    };
+    let s = String::from_utf8_lossy(&bytes)
+        .trim_end_matches('\0')
+        .trim()
+        .to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+fn ifd_gps_coord(tiff: &[u8], e: &IfdEntry, le: bool) -> Option<f64> {
+    if e.typ != 5 || e.count < 3 {
+        return None;
+    }
+    let off = e.value as usize;
+    if off + 24 > tiff.len() {
+        return None;
+    }
+    let rat = |i: usize| -> Option<f64> {
+        let base = off + i * 8;
+        let num = u32_at(tiff, base, le)? as f64;
+        let den = u32_at(tiff, base + 4, le)? as f64;
+        if den == 0.0 {
+            None
+        } else {
+            Some(num / den)
+        }
+    };
+    Some(rat(0)? + rat(1)? / 60.0 + rat(2)? / 3600.0)
+}
+
+fn apply_lenient(fields: LenientExif, meta: &mut FileMeta) {
+    if let Some(s) = fields.make {
+        meta.camera_make = Some(s);
+    }
+    if let Some(s) = fields.model {
+        meta.camera_model = Some(s);
+    }
+    if let Some(s) = fields.lens {
+        meta.lens = Some(s);
+    }
+    if let (Some(w), Some(h)) = (fields.width, fields.height) {
+        if meta.width.is_none() {
+            meta.width = Some(w);
+        }
+        if meta.height.is_none() {
+            meta.height = Some(h);
+        }
+    }
+    if let (Some(lat), Some(lon)) = (fields.lat, fields.lon) {
+        meta.lat = Some(lat);
+        meta.lon = Some(lon);
+    }
+    if let Some(raw) = fields.datetime_original.or(fields.datetime) {
+        if let Some(ms) = parse_exif_datetime(&raw) {
+            let ms = match fields.offset.as_deref() {
+                Some(off) => apply_offset_ms(ms, off),
+                None => ms,
+            };
+            meta.captured_ms = Some(ms);
+            meta.date_source = "exif".into();
+            meta.date_confidence = 0.98;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::media::ymd_hms_ms;
+    use std::path::Path;
 
     #[test]
     fn parses_exif_datetime_formats() {
@@ -656,5 +938,29 @@ mod tests {
         let mut jpeg = vec![0xFF, 0xD8];
         jpeg.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x10, 0x00, 0x20, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xD9]);
         assert_eq!(jpeg_sof_size(&jpeg), Some((32, 16)));
+    }
+
+    #[test]
+    fn lenient_parser_reads_piexif_style_jpeg() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/exif_gps_thumb.jpg");
+        let bytes = std::fs::read(&path).expect("fixture");
+        let fields = parse_exif_lenient(&bytes).expect("lenient parse");
+        assert_eq!(fields.make.as_deref(), Some("Canon"));
+        assert_eq!(fields.model.as_deref(), Some("EOS R6"));
+        assert!(fields.datetime_original.as_deref().unwrap().starts_with("2024:06:03"));
+        let lat = fields.lat.unwrap();
+        let lon = fields.lon.unwrap();
+        assert!((lat - 38.7223).abs() < 0.001, "lat {lat}");
+        assert!((lon + 9.1393).abs() < 0.001, "lon {lon}");
+        let mut meta = FileMeta::default();
+        if let Ok(exif) = parse_exif(&bytes) {
+            apply_exif(&exif, &mut meta);
+        } else if let Some(f) = parse_exif_lenient(&bytes) {
+            apply_lenient(f, &mut meta);
+        }
+        assert_eq!(meta.date_source, "exif");
+        assert!(meta.captured_ms.is_some());
+        assert!(meta.lat.is_some() && meta.lon.is_some());
+        assert!(extract_exif_jpeg_thumbnail(&bytes).is_some());
     }
 }
