@@ -1,0 +1,95 @@
+name: Publish Mnemosyne Web Preview
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel an in-progress publication; a stale run checks the branch
+# head before it can replace the latest published website.
+concurrency:
+  group: mnemosyne-github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Restore initial source archive when needed
+        run: |
+          if [ ! -f web/index.html ]; then
+            test -s source.bundle.b64
+            base64 --decode source.bundle.b64 | tar -xz
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test and build the web application
+        run: npm run check
+
+      - name: Verify the GitHub Pages artifact
+        run: |
+          set -euo pipefail
+          test -s dist/index.html
+          test -s dist/main.js
+          test -s dist/styles.css
+          test -s dist/db.js
+          test -s dist/organizer.js
+          test -s dist/media.js
+          test -s dist/assets/mark.svg
+          test -f dist/.nojekyll
+          node scripts/verify-pages.mjs
+
+      - name: Save this revision's web preview for recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: mnemosyne-web-preview-${{ github.sha }}
+          path: dist/
+          include-hidden-files: true
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Check whether this revision is still the latest main
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')
+          if [ "$latest" = "$GITHUB_SHA" ]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            echo 'This revision was archived but superseded by a newer main commit.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Configure GitHub Pages
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload live web artifact
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy live website
+        if: steps.current.outputs.publish == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4

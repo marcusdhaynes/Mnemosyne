@@ -1,0 +1,54 @@
+name: Expand Initial Source
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'source.bundle.b64'
+      - '.github/workflows/bootstrap.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract original application source files
+        run: |
+          set -euo pipefail
+          if [ -f web/index.html ]; then
+            echo 'Plain source already exists; nothing to expand.'
+            exit 0
+          fi
+          test -s source.bundle.b64
+          base64 --decode source.bundle.b64 | tar -xz
+      - name: Generate cross-platform native icons
+        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        run: |
+          python -m pip install --quiet pillow
+          python - <<'PYTHON'
+          from PIL import Image,ImageDraw,ImageFont
+          from pathlib import Path
+          folder=Path('src-tauri/icons');folder.mkdir(parents=True,exist_ok=True)
+          def icon(size):
+            im=Image.new('RGBA',(size,size),(32,31,29,255));d=ImageDraw.Draw(im)
+            f=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf',int(size*.60))
+            bb=d.textbbox((0,0),'M',font=f)
+            x=(size-(bb[2]-bb[0]))/2-bb[0];y=(size-(bb[3]-bb[1]))/2-bb[1]
+            d.text((x,y),'M',font=f,fill=(217,197,160,255));return im
+          icon(32).save(folder/'32x32.png')
+          icon(128).save(folder/'128x128.png')
+          icon(256).save(folder/'128x128@2x.png')
+          icon(512).save(folder/'icon.png')
+          icon(512).save(folder/'icon.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          icon(512).save(folder/'icon.icns')
+          PYTHON
+      - name: Commit expanded source (retain bundle for provenance)
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: expand Mnemosyne application source and generate native icons'
+          git push origin HEAD:main
