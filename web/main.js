@@ -3,6 +3,7 @@ import {mediaKind,formattedDate,monthKey,monthLabel,formatBytes,suggestTags,visi
 import {digestFile,createThumbnail,capturedAt} from './media.js';
 import {sourceOf,isShortVideo,proposeOrganization,applyAutomatic,applyReviewLabels,dismissReviewLabels,reviewSummary,categorizeCatalog} from './intelligence.js';
 import {expandImports} from './archives.js';
+import {resolveMedia} from './formats/index.js';
 import {SOURCES} from './sources.js';
 import {DEFAULT_EDITS,normalizedEdits,photoFilter,renderEditedBlob} from './editor.js';
 import {detectLocalFaces,faceDetectorAvailable,makeFaceReview} from './recognition.js';
@@ -40,6 +41,10 @@ async function importFiles(inputFiles){
   try{
     const expanded=await expandImports(selected,{onProgress:(i,total)=>{if(i%64===0)setBusy(true,`Unpacking export: ${i.toLocaleString()}/${total.toLocaleString()}…`,5);}});
     const accepted=expanded.files;if(!accepted.length){toast('No supported media in this selection. Extract archives first if needed.');return;}
+    setBusy(true,'Pairing Live Photos, bursts and export dates…',5);
+    const formatOf=new Map();
+    try{for(const item of await resolveMedia([...accepted,...expanded.sidecars]))for(const f of item.files)if(f.role!=='sidecar')formatOf.set(f.path,{item,role:f.role});}
+    catch(error){console.error('Media format grouping failed; importing files individually',error);}
     for(let offset=0;offset<accepted.length;offset+=16){
       const batch=[];
       for(let i=offset;i<Math.min(offset+16,accepted.length);i++){
@@ -47,8 +52,8 @@ async function importFiles(inputFiles){
           const hash=await digestFile(file);
           if(hash&&known.has(hash)){skipped++;continue;}
           const preview=await createThumbnail(file),stamp=Date.now();
-          const sourcePath=file.virtualPath||file.webkitRelativePath||'';
-          const photo={id:crypto.randomUUID(),name:file.name,kind:mediaKind(file),size:file.size,type:file.type||'application/octet-stream',folder:sourcePath.split('/').slice(0,-1).join('/'),takenAt:await capturedAt(file),importedAt:stamp,hash,phash:preview.phash,width:preview.width,height:preview.height,duration:preview.duration,favorite:false,deletedAt:null,tags:[],people:[],albumIds:[],edits:{brightness:100,contrast:100,saturation:100,rotation:0}};
+          const sourcePath=file.virtualPath||file.webkitRelativePath||'';const format=formatOf.get(sourcePath||file.name);
+          const photo={id:crypto.randomUUID(),name:file.name,kind:mediaKind(file),size:file.size,type:file.type||'application/octet-stream',folder:sourcePath.split('/').slice(0,-1).join('/'),takenAt:format?.item.takenAt??await capturedAt(file),takenAtSource:format?.item.takenAtSource??null,mediaGroupId:format?.item.id??null,mediaRole:format?.role??null,formatKind:format?.item.kind??null,formatTags:format?.item.tags??[],motionVideo:format?.role==='primary'?format.item.motionVideo:null,importedAt:stamp,hash,phash:preview.phash,width:preview.width,height:preview.height,duration:preview.duration,favorite:false,deletedAt:null,tags:[],people:[],albumIds:[],edits:{brightness:100,contrast:100,saturation:100,rotation:0}};
           const categorized=applyAutomatic(photo,proposeOrganization(photo));
           if(categorized.reviewSuggestions.length)review++;
           batch.push({photo:categorized,original:file,thumbnail:preview.thumbnail});

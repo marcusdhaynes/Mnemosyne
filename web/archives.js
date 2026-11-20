@@ -8,6 +8,9 @@ const MAX_ARCHIVE_BYTES = 1_500_000_000;
 const MAX_ENTRIES = 60000;
 const MAX_SINGLE_FILE = 950_000_000;
 const MAX_TOTAL_EXTRACTED = 3_000_000_000;
+const MAX_SIDECAR_BYTES = 20_000_000;
+/** Export metadata kept for web/formats (Takeout, Instagram/Facebook JSON, Snapchat memories_history). */
+export const isSidecarPath = path => /\.(json|html?)$/i.test(path);
 function legalPath(path){return path&&!path.startsWith('/')&&!path.startsWith('\\')&&!/^[A-Za-z]:/.test(path)&&!path.includes('\0')&&!path.split(/[\\/]/).includes('..');}
 function mime(path){const ext=path.split('.').pop()?.toLowerCase();return ({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif',avif:'image/avif',heic:'image/heic',heif:'image/heif',mp4:'video/mp4',mov:'video/quicktime',m4v:'video/mp4',webm:'video/webm',mkv:'video/x-matroska',avi:'video/x-msvideo', '3gp':'video/3gpp'})[ext]||'';}
 export async function expandZip(file,{onProgress=()=>{},maxFiles=MAX_ENTRIES}={}){
@@ -20,14 +23,15 @@ export async function expandZip(file,{onProgress=()=>{},maxFiles=MAX_ENTRIES}={}
   const entries=u16(end+10),start=u32(end+16),length=u32(end+12);
   if(entries===65535||start===0xffffffff||length===0xffffffff)throw new Error('ZIP64 requires desktop extraction; import the extracted folder.');
   if(entries>Math.min(MAX_ENTRIES,maxFiles)||start+length>bytes.length)throw new Error('ZIP entries exceed safety limits.');
-  const output=[];let offset=start,total=0,skipped=0;
+  const output=[],sidecars=[];let offset=start,total=0,skipped=0;
   for(let i=0;i<entries;i++){
     if(offset+46>bytes.length||u32(offset)!==0x02014b50)throw new Error('Malformed ZIP directory.');
     const flag=u16(offset+8),method=u16(offset+10),compressed=u32(offset+20),unpacked=u32(offset+24),nameLen=u16(offset+28),extraLen=u16(offset+30),commentLen=u16(offset+32),local=u32(offset+42);
     const path=decoder.decode(bytes.subarray(offset+46,offset+46+nameLen)).replaceAll('\\','/');
     offset+=46+nameLen+extraLen+commentLen;
     if(!legalPath(path))throw new Error('Unsafe path in archive. Import canceled.');
-    if(path.endsWith('/')||!mediaKind({name:path,type:mime(path)})){skipped++;continue;}
+    const sidecar=isSidecarPath(path)&&unpacked<=MAX_SIDECAR_BYTES;
+    if(path.endsWith('/')||(!sidecar&&!mediaKind({name:path,type:mime(path)}))){skipped++;continue;}
     if(flag&1||!(method===0||method===8)){skipped++;continue;}
     total+=unpacked;
     if(unpacked>MAX_SINGLE_FILE||total>MAX_TOTAL_EXTRACTED||unpacked>Math.max(1,compressed)*500)throw new Error('Suspiciously large compressed media. Extract outside Mnemosyne.');
@@ -46,17 +50,18 @@ export async function expandZip(file,{onProgress=()=>{},maxFiles=MAX_ENTRIES}={}
     const originalName=path.split('/').at(-1);
     const imported=new File([blob],originalName,{type:mime(path),lastModified:file.lastModified||Date.now()});
     Object.defineProperty(imported,'virtualPath',{value:path,enumerable:true});
-    output.push(imported);
+    (sidecar?sidecars:output).push(imported);
     if(i%16===0)onProgress(i+1,entries);
   }
-  return {files:output,skipped,totalEntries:entries};
+  return {files:output,sidecars,skipped,totalEntries:entries};
 }
 export async function expandImports(files,{onProgress=()=>{}}={}){
-  const flat=[],reports=[];
+  const flat=[],sidecars=[],reports=[];
   for(const f of files){
     if(/\.zip$/i.test(f.name)){
-      const report=await expandZip(f,{onProgress});reports.push({archive:f.name,count:report.files.length,skipped:report.skipped});flat.push(...report.files);
+      const report=await expandZip(f,{onProgress});reports.push({archive:f.name,count:report.files.length,skipped:report.skipped});flat.push(...report.files);sidecars.push(...report.sidecars);
     }else if(mediaKind(f))flat.push(f);
+    else if(isSidecarPath(f.name)&&f.size<=MAX_SIDECAR_BYTES)sidecars.push(f);
   }
-  return {files:flat,reports};
+  return {files:flat,sidecars,reports};
 }
